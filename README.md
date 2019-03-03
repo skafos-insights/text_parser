@@ -12,5 +12,5 @@ numpy
 
 # To run
 - Clone the repo
-- Extract the minutes files from this Google bucket (TODO) to a data directory (TODO -- setup.py this)
+- Extract the minutes files from [this](https://console.cloud.google.com/storage/browser/charlottesville-council-minutes) Google bucket (TODO) to a data directory (TODO -- setup.py this)
 - `python driver.py`
