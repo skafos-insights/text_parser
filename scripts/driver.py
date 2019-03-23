@@ -13,7 +13,7 @@ import pandas as pd
 import sklearn as sk
 import tika
 
-BASE_URL = "https://rewarding-smooth-cowbird.gigalixirapp.com/api"
+BASE_URL = "https://thoughtful-confused-italiangreyhound.gigalixirapp.com/api"
 MINUTES_PATH = Path('../data/cville_pdfs/minutes/').glob('*.txt')
 
 # This is awful and hacky -- I extracted it from the metadata of these PDFs historically.
