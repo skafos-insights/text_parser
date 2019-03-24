@@ -42,10 +42,10 @@ def write_meetings_to_database(df: pd.DataFrame, meeting_texts, meeting_dates, b
 
     # Mesh to the existing date format for meetings (YYYYY-MM-DD) from ISO
     meeting_dates = [date[0:10] for date in meeting_dates if date is not None]
+    meetings_to_create = dict((date, (date, text)) for (date, text) in zip(meeting_dates, meeting_texts)).values()
 
-    for date, text in zip(meeting_dates, meeting_texts):
-
-        existing_meetings = get_meetings(base_url)
+    existing_meetings = get_meetings(base_url)
+    for date, text in meetings_to_create:
         meeting = {
             'date': date,
             'body': text,
@@ -97,8 +97,8 @@ def write_discussions_to_database(df: pd.DataFrame, existing_meetings, existing_
 
 if __name__ == '__main__':
     df, meeting_texts, meeting_dates = compile_master_dataframe(MINUTES_PATH)
-    existing_issues = write_issues_to_database(df, BASE_URL)
-    # existing_issues = get_issues(BASE_URL)
+    # existing_issues = write_issues_to_database(df, BASE_URL)
+    existing_issues = get_issues(BASE_URL)
     existing_meetings = write_meetings_to_database(df, meeting_texts, meeting_dates, BASE_URL)
     # existing_meetings = get_meetings(BASE_URL)
-    write_discussions_to_database(df, existing_meetings, existing_issues, BASE_URL)
+    # write_discussions_to_database(df, existing_meetings, existing_issues, BASE_URL)

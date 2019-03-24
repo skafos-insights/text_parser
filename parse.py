@@ -118,7 +118,7 @@ def get_date_expensive(text):
     days = [date for (date, precision) in candidates if precision is "day"]
     if len(days) < 1:
         return None
-    return days[0].strftime('%m-%d-%y')
+    return days[0].strftime('%Y-%m-%d')
 
 from datetime import datetime
 def find_meeting_date(text):
@@ -127,7 +127,7 @@ def find_meeting_date(text):
 
         if len(match) > 0:
             datestring = match[0][3:-4]
-            return datetime.strptime(datestring, '%A, %B %d, %Y').strftime('%m-%d-%y')
+            return datetime.strptime(datestring, '%A, %B %d, %Y').strftime('%Y-%m-%d')
     except:
         pass
     return get_date_expensive(text)
