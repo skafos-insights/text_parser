@@ -15,8 +15,11 @@ def get_issue_pairs(df):
     for name in df["name"].unique():
         statuses = df[df["name"] == name]["status"]
         statuses = statuses[statuses != ""].tail(1)
-        if len(statuses) > 0 and name is not "":
-            pairs.append((name, statuses.iloc[0]))
+        if name is not "":
+            if len(statuses) > 0:
+                pairs.append((name, statuses.iloc[0]))
+            else:
+                pairs.append((name, "UNKNOWN"))
     return pairs
 
 def write_issues_to_database(df: pd.DataFrame, base_url: str):
@@ -25,7 +28,6 @@ def write_issues_to_database(df: pd.DataFrame, base_url: str):
 
     existing_issues = get_issues(base_url)
     for name, status in pairs:
-        print("------------------")
         issue = {
             "description": "No description",
             "identifier": name,
@@ -33,8 +35,10 @@ def write_issues_to_database(df: pd.DataFrame, base_url: str):
             "status": status if status is not None else "UNKNOWN",
         }
         created_issue = create_issue_if_needed(issue, existing_issues, base_url)
-    
-    return existing_issues
+        if(created_issue):
+            print("Created", name)
+
+    return get_issues(base_url)
 
 
 def write_meetings_to_database(df: pd.DataFrame, meeting_texts, meeting_dates, base_url):
@@ -53,7 +57,7 @@ def write_meetings_to_database(df: pd.DataFrame, meeting_texts, meeting_dates, b
         if meeting['body'].strip():
             created_meeting = create_meeting_if_needed(meeting, existing_meetings, base_url)
     
-    return existing_meetings
+    return get_meetings(base_url)
 
 
 def write_discussions_to_database(df: pd.DataFrame, existing_meetings, existing_issues, base_url) -> None:
@@ -66,17 +70,17 @@ def write_discussions_to_database(df: pd.DataFrame, existing_meetings, existing_
         try:
             matching_issues = [issue for issue in existing_issues if issue['identifier'].upper().strip() == discussion['name'].upper().strip()]
             matching_meetings = [meeting for meeting in existing_meetings if meeting['date'] == discussion['date'][:10]]
-            print(len(matching_issues), len(matching_meetings))
             if(len(matching_issues) == 0):
-                print("No match", discussion["name"])
-            continue
+                print("No match", discussion["name"], discussion["date"])
+            if(len(matching_issues) == 2):
+                print(matching_issues)
+                print(discussion)
         except KeyError:  # Indicates missing issue identifier or meeting date
             pass
         if len(matching_issues) != 0 and len(matching_meetings) != 0:
-            issue_id = next((issue['id'] for issue in existing_issues if issue['identifier'] == discussion['name'].upper()))
-            meeting_id = next(meeting['id'] for meeting in existing_meetings if meeting['date'] == discussion['date'][:10])
-            print(discussion["date"], discussion["name"])
-        
+            issue_id = next(iter(matching_issues))["id"]
+            meeting_id = next(iter(matching_meetings))["id"]
+
             parsed_discussion = {
                 'body': discussion['raw_text'],
                 'issue_id': issue_id,
@@ -91,14 +95,14 @@ def write_discussions_to_database(df: pd.DataFrame, existing_meetings, existing_
                 try:
                     create_discussion(parsed_discussion, [], base_url)
                 except Exception:
-                    print('Parsed discussion:', parsed_discussion)
+                    print('Error. Parsed discussion:', parsed_discussion)
                     raise Exception('Error')
 
 
 if __name__ == '__main__':
     df, meeting_texts, meeting_dates = compile_master_dataframe(MINUTES_PATH)
-    # existing_issues = write_issues_to_database(df, BASE_URL)
-    existing_issues = get_issues(BASE_URL)
+    existing_issues = write_issues_to_database(df, BASE_URL)
+    # existing_issues = get_issues(BASE_URL)
     existing_meetings = write_meetings_to_database(df, meeting_texts, meeting_dates, BASE_URL)
     # existing_meetings = get_meetings(BASE_URL)
-    # write_discussions_to_database(df, existing_meetings, existing_issues, BASE_URL)
+    write_discussions_to_database(df, existing_meetings, existing_issues, BASE_URL)

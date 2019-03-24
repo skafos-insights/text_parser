@@ -67,14 +67,28 @@ def extract_dollar_amount(text: str) -> str:
 
 def extract_status(text: str) -> str:
     pat = re.compile(r'\([a-z]+.*\)', re.DOTALL)
-    if pat.findall(str(text)):
-        return pat.findall(str(text))[0]
+    matches = pat.findall(str(text))
+    if matches:
+        return matches[0].split("\n")[0]
     pat = re.compile(r'\(\d+[a-z].*\)', re.DOTALL)
-    if pat.findall(str(text)):
-        return pat.findall(str(text))[0]
+    matches = pat.findall(str(text))
+    if matches:
+        return matches[0].split("\n")[0]
     else:
         return ''
 
+import math
+def get_vote_status(df):
+    df = df.copy()
+    voting_mask = df["voting"] != ""
+    voted = df[voting_mask]
+    voted["ayes"].apply(lambda l: len(l.split(",")) if not type(l) == type(0.0) else 0)
+    voted["noes"].apply(lambda l: len(l.split(",")) if not type(l) == type(0.0) else 0)
+    statuses = voted["ayes"]
+    statuses[voted["ayes"] > voted["noes"]] = "Passed"
+    statuses[voted["ayes"] <= voted["noes"]] = "Not passed"
+    df.loc[voting_mask, "status"] = statuses
+    return df
 
 def extract_voting(text: str) -> str:
     pat = re.compile(r'\(Ayes.*\)', re.DOTALL)
@@ -140,6 +154,31 @@ def trim_special(text: str) -> str:
     s = match[0] if match else text
     return s.split(")", maxsplit=1)[0]
 
+from collections import defaultdict
+def getsubs(loc, s):
+    substr = s[loc:]
+    i = -1
+    while(substr):
+        yield substr
+        substr = s[loc:i]
+        i -= 1
+
+def longestRepetitiveSubstring(r):
+    occ = defaultdict(int)
+    # tally all occurrences of all substrings
+    for i in range(len(r)):
+        for sub in getsubs(i,r):
+            occ[sub] += 1
+    # filter out all sub strings with fewer than 2 occurrences
+    filtered = [k for k,v in occ.items() if v >= 2]
+    if filtered:
+        maxkey =  max(filtered, key=len) # Find longest string
+        if len(maxkey) > 10 and r.index(maxkey) == 0:
+            return maxkey
+        return r
+    else:
+        return r
+
 def get_consent_agenda_df(text: str, date: str) -> pd.DataFrame:
     """
     Get all the consent agenda items out into a parsed format.
@@ -161,6 +200,7 @@ def get_consent_agenda_df(text: str, date: str) -> pd.DataFrame:
             # dollar_replaced_names = dollar_replaced_names["name"]
         consent_df['name'] = dollar_replaced_names.str.replace('-', '')
         consent_df['status'] = consent_df['raw_text'].apply(extract_status)
+        consent_df.loc[consent_df["raw_text"].str.contains("BE IT RESOLVED"), "status"] = "Resolved"
         consent_df['name'] = consent_df.apply(lambda x: x['name'].replace(x['status'], ''), axis=1)
         consent_df['name'] = consent_df['name'].str.replace('(2nd', '', regex=False) \
             .str.replace('(carried)', '',
@@ -170,6 +210,7 @@ def get_consent_agenda_df(text: str, date: str) -> pd.DataFrame:
         consent_df['date'] = str(date)
         consent_df['name'] = consent_df['name'].str.split().apply(lambda x: ' '.join(x))
         consent_df['name'] = consent_df['name'].apply(lambda s: trim_special(s))
+        consent_df["name"] = [longestRepetitiveSubstring(name) for name in list(consent_df["name"])]
 
         consent_df = consent_df[consent_df['name'].str.len() < 200]
         consent_df = consent_df[consent_df['status'].str.len() < 200]
@@ -197,17 +238,21 @@ def get_other_items_df(text: str, date: str) -> pd.DataFrame:
     other_items_df['name'] = other_items_df.apply(lambda x: x['name'].replace(x['dollar_amount'], ''),
                                                   axis=1).str.replace('-', '')
     other_items_df['status'] = other_items_df['name'].apply(extract_status)
+    other_items_df.loc[other_items_df["raw_text"].str.contains("BE IT RESOLVED"), "status"] = "Resolved"
     other_items_df['name'] = other_items_df.apply(lambda x: x['name'].replace(x['status'], ''), axis=1)
     other_items_df['name'] = other_items_df['name'].str.replace('OTHER BUSINESS', '').str.strip()
     other_items_df = other_items_df[other_items_df['name'].str.len() > 5]
-    other_items_df['name'] = other_items_df['name'].apply(lambda s: trim_special(s))
     other_items_df['type'] = other_items_df['type'].str.replace('\n', '', regex=False).str.replace('  ', ' ',
+
                                                                                                    regex=False).str.strip()
     other_items_df['voting'] = other_items_df['raw_text'].apply(extract_voting)
     other_items_df['date'] = str(date)
     other_items_df['name'] = other_items_df['name'].str.split().apply(lambda x: ' '.join(x))
+    other_items_df['name'] = other_items_df['name'].apply(lambda s: trim_special(s))
+    other_items_df["name"] = [longestRepetitiveSubstring(name) for name in list(other_items_df["name"])]
     other_items_df['ayes'] = other_items_df['voting'].apply(extract_ayes)
     other_items_df['noes'] = other_items_df['voting'].apply(extract_noes)
+    other_items_df = get_vote_status(other_items_df)
     other_items_df = other_items_df[other_items_df['name'].str.len() < 200]
     return other_items_df
 

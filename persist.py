@@ -1,11 +1,15 @@
 import requests
 
 def get_data(req):
-    errors = req.json().get("errors", None)
-    if(errors is not None):
-        raise Exception(errors)
-    else:
-        return req.json()["data"]
+    try:
+        errors = req.json().get("errors", None)
+        if(errors is not None):
+            raise Exception(errors)
+        else:
+            return req.json()["data"]
+    except:
+        print("Error:")
+        print(req.text)
 
 
 def get_discussions(base_url: str):
@@ -51,7 +55,8 @@ def create_discussion(discussion, discussions, base_url):
     if discussion["body"] not in [d["body"] for d in discussions]:
         r = requests.post(base_url + "/discussions", json={"discussion": discussion})
         created_discussion = get_data(r)
-        print("Created discussion" , created_discussion["body"][0:50])
+        if created_discussion is not None:
+            print("Created discussion" , discussion["body"][0:50].replace("\n", ""))
         return created_discussion
     else:
         return next(d for d in discussions if d["body"] == discussion["body"])
