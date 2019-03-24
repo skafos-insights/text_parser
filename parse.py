@@ -4,7 +4,7 @@ from itertools import zip_longest
 import re
 from typing import List, Tuple
 
-from scripts.constants import FILE_NAMES_AND_DATES
+from constants import FILE_NAMES_AND_DATES
 
 
 def grouper(iterable, n, fillvalue=None):
@@ -58,17 +58,18 @@ def replace_terrible_strings(text: str) -> str:
 
 
 def extract_dollar_amount(text: str) -> str:
-    pat = re.compile(r'\$\d+\,*\d*\.*\d*')
+    pat = re.compile(r'\$\d+\,*\d*\.*\d*', re.DOTALL)
     if pat.findall(str(text)):
         return pat.findall(str(text))[0]
     else:
         return ''
 
+
 def extract_status(text: str) -> str:
-    pat = re.compile(r'\([a-z]+.*\)')
+    pat = re.compile(r'\([a-z]+.*\)', re.DOTALL)
     if pat.findall(str(text)):
         return pat.findall(str(text))[0]
-    pat = re.compile(r'\(\d+[a-z].*\)')
+    pat = re.compile(r'\(\d+[a-z].*\)', re.DOTALL)
     if pat.findall(str(text)):
         return pat.findall(str(text))[0]
     else:
@@ -76,29 +77,34 @@ def extract_status(text: str) -> str:
 
 
 def extract_voting(text: str) -> str:
-    pat = re.compile(r'\(Ayes.*\)')
-    if pat.findall(str(text)):
-        return pat.findall(str(text))[0]
+    pat = re.compile(r'\(Ayes.*\)', re.DOTALL)
+    matches = pat.findall(str(text).replace('\n', ''))
+    if matches:
+        return matches[0]
     return ''
 
 
 def extract_all_caps(text: str) -> str:
-    pat = re.compile(r'(([A-Z]|\s)+)')
+    pat = re.compile(r'(([A-Z]|\s)+)', re.DOTALL)
     if pat.findall(str(text)):
         return pat.findall(str(text))[0]
 
 
 def extract_ayes(text: str) -> str:
-    pat = re.compile(r'\(Ayes:.*;')
+    pat = re.compile(r'\(Ayes:.*;', re.DOTALL)
     if pat.findall(str(text)):
         return pat.findall(str(text))[0].split(': ')[1]
     return ''
 
 
 def extract_noes(text: str) -> str:
-    pat = re.compile(r'Noes:.*\.')
-    if pat.findall(str(text)):
-        return pat.findall(str(text))[0].split(': ')[1]
+    pat = re.compile(r'Noes:.*\.', re.DOTALL)
+    matches = pat.findall(str(text))
+    if matches:
+        split = matches[0].split(': ')
+        if len(split) > 1:
+            return split[1]
+    return ""
 
 
 # Driver functions
@@ -113,13 +119,18 @@ def get_consent_agenda_df(text: str, date: str) -> pd.DataFrame:
         consent_df['name'] = consent_df['raw_text'].str.split('\n\n').apply(lambda x: x[0])
         consent_df = consent_df[~consent_df['name'].str.contains('Minutes')]
         consent_df['type'] = consent_df['name'].str.replace('\n', '').str.split(': ').apply(lambda x: x[0])
-        consent_df['name'] = consent_df['name'].str.replace('\n', '').str.split(': ').apply(lambda x: x[1:]).apply(lambda x: ' '.join(x))
+        consent_df['name'] = consent_df['name'].str.replace('\n', '').str.split(': ').apply(lambda x: x[1:]).apply(
+            lambda x: ' '.join(x))
         consent_df['dollar_amount'] = consent_df['name'].apply(extract_dollar_amount)
-        consent_df.loc[consent_df['dollar_amount'] == '', 'dollar_amount'] = consent_df['raw_text'].apply(extract_dollar_amount)
-        consent_df['name'] = consent_df.apply(lambda x: x['name'].replace(x['dollar_amount'], ''), axis=1).str.replace('-', '')
+        consent_df.loc[consent_df['dollar_amount'] == '', 'dollar_amount'] = consent_df['raw_text'].apply(
+            extract_dollar_amount)
+        consent_df['name'] = consent_df.apply(lambda x: x['name'].replace(x['dollar_amount'], ''), axis=1).str.replace(
+            '-', '')
         consent_df['status'] = consent_df['raw_text'].apply(extract_status)
         consent_df['name'] = consent_df.apply(lambda x: x['name'].replace(x['status'], ''), axis=1)
-        consent_df['name'] = consent_df['name'].str.replace('(2nd', '', regex=False).str.replace('(carried)', '', regex=False).str.replace('(CARRIED)', '', regex=False).str.replace('(Carried)', '', regex=False).str.strip()
+        consent_df['name'] = consent_df['name'].str.replace('(2nd', '', regex=False).str.replace('(carried)', '',
+                                                                                                 regex=False).str.replace(
+            '(CARRIED)', '', regex=False).str.replace('(Carried)', '', regex=False).str.strip()
         consent_df['voting'] = consent_df['raw_text'].apply(extract_voting)
         consent_df['date'] = str(date)
         consent_df['name'] = consent_df['name'].str.split().apply(lambda x: ' '.join(x))
@@ -137,15 +148,20 @@ def get_other_items_df(text: str, date: str) -> pd.DataFrame:
     other_items_df = pd.DataFrame(other_items, columns=['type', 'raw_text'])
     if not other_items:  # No other items provided
         return other_items_df
-    other_items_df['name'] = other_items_df['raw_text'].str.split('\n \n').apply(lambda x: x[0]).str.replace(': ', '').str.replace('*', '').str.replace('\n', ' ')
-    other_items_df.loc[other_items_df['name'].str.len() > 200, 'name'] = other_items_df['raw_text'].str.split('\n\n').apply(lambda x: x[0]).str.replace(': ', '').str.replace('*', '').str.replace('\n', ' ')
+    other_items_df['name'] = other_items_df['raw_text'].str.split('\n \n').apply(lambda x: x[0]).str.replace(': ',
+                                                                                                             '').str.replace(
+        '*', '').str.replace('\n', ' ')
+    other_items_df.loc[other_items_df['name'].str.len() > 200, 'name'] = other_items_df['raw_text'].str.split(
+        '\n\n').apply(lambda x: x[0]).str.replace(': ', '').str.replace('*', '').str.replace('\n', ' ')
     other_items_df['dollar_amount'] = other_items_df['name'].apply(extract_dollar_amount)
-    other_items_df['name'] = other_items_df.apply(lambda x: x['name'].replace(x['dollar_amount'], ''), axis=1).str.replace('-', '')
+    other_items_df['name'] = other_items_df.apply(lambda x: x['name'].replace(x['dollar_amount'], ''),
+                                                  axis=1).str.replace('-', '')
     other_items_df['status'] = other_items_df['name'].apply(extract_status)
     other_items_df['name'] = other_items_df.apply(lambda x: x['name'].replace(x['status'], ''), axis=1)
     other_items_df['name'] = other_items_df['name'].str.replace('OTHER BUSINESS', '').str.strip()
     other_items_df = other_items_df[other_items_df['name'].str.len() > 5]
-    other_items_df['type'] = other_items_df['type'].str.replace('\n', '', regex=False).str.replace('  ', ' ', regex=False).str.strip()
+    other_items_df['type'] = other_items_df['type'].str.replace('\n', '', regex=False).str.replace('  ', ' ',
+                                                                                                   regex=False).str.strip()
     other_items_df['voting'] = other_items_df['raw_text'].apply(extract_voting)
     other_items_df['date'] = str(date)
     other_items_df['name'] = other_items_df['name'].str.split().apply(lambda x: ' '.join(x))
@@ -168,12 +184,18 @@ def compile_master_dataframe(minutes_path: str):
         with open(minutes) as file:
             text = file.read()
             date = FILE_NAMES_AND_DATES[str(minutes).replace('.txt', '.pdf')]
+            print(str(minutes))
+            minutes_id = str(minutes).split("/")[-1].split(".")[0]
             meeting_texts.append(text)
             meeting_dates.append(date)
 
             try:
-                consent_dfs.append(get_consent_agenda_df(text, date))
-                other_items_dfs.append(get_other_items_df(text, date))
+                consent_agenda_df = get_consent_agenda_df(text, date)
+                consent_agenda_df["document_id"] = minutes_id
+                consent_dfs.append(consent_agenda_df)
+                other_items_df = get_other_items_df(text, date)
+                other_items_df["document_id"] = minutes_id
+                other_items_dfs.append(other_items_df)
             except AttributeError:
                 print('BAD PATH: {}'.format(str(minutes)))
 

@@ -2,12 +2,13 @@ from pathlib import Path
 
 import pandas as pd
 
-from scripts.parse import compile_master_dataframe
-from scripts.persist import create_discussion, get_issues, get_meetings, create_meeting_if_needed, \
+from parse import compile_master_dataframe
+from persist import create_discussion, get_issues, get_meetings, create_meeting_if_needed, \
     create_issue_if_needed
 
-BASE_URL = "https://thoughtful-confused-italiangreyhound.gigalixirapp.com/api"
-MINUTES_PATH = Path('../data/cville_pdfs/minutes/').glob('*.txt')
+# BASE_URL = "https://thoughtful-confused-italiangreyhound.gigalixirapp.com/api"
+BASE_URL = "http://localhost:4000/api"
+MINUTES_PATH = Path('./data/cville_pdfs/minutes/').glob('*.txt')
 
 def write_issues_to_database(df: pd.DataFrame, base_url: str):
     """Write issues to the database"""

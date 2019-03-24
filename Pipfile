@@ -12,6 +12,10 @@ tika = "*"
 scipy = "*"
 sklearn = "*"
 jupyterhub = "*"
+notebook = "*"
+datefinder = "*"
+pytz = "*"
+date-extractor = "*"
 
 [requires]
 python_version = "3.7"
