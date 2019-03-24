@@ -10,19 +10,27 @@ from persist import create_discussion, get_issues, get_meetings, create_meeting_
 BASE_URL = "http://localhost:4000/api"
 MINUTES_PATH = Path('./data/cville_pdfs/minutes/').glob('*.txt')
 
+def get_issue_pairs(df):
+    pairs = []
+    for name in df["name"].unique():
+        statuses = df[df["name"] == name]["status"]
+        statuses = statuses[statuses != ""].tail(1)
+        if len(statuses) > 0 and name is not "":
+            pairs.append((name, statuses.iloc[0]))
+    return pairs
+
 def write_issues_to_database(df: pd.DataFrame, base_url: str):
     """Write issues to the database"""
-    issues_df = df.copy()
-    issues_df['name'] = issues_df.name.str.upper()
-    issues_df = pd.DataFrame(issues_df.groupby(['name'])['date'].max()).reset_index().merge(df, on=['name', 'date'])[['name', 'status']]
+    pairs = get_issue_pairs(df)
 
-    for ind, row in issues_df.iterrows():
-        existing_issues = get_issues(base_url)
+    existing_issues = get_issues(base_url)
+    for name, status in pairs:
+        print("------------------")
         issue = {
             "description": "No description",
-            "identifier": row['name'] if row['name'] else 'BLANK',
-            "importance": 10_000,
-            "status": row['status'] if row['status'] else 'UNKNOWN',
+            "identifier": name,
+            "importance": 0,
+            "status": status if status is not None else "UNKNOWN",
         }
         created_issue = create_issue_if_needed(issue, existing_issues, base_url)
     
@@ -33,7 +41,7 @@ def write_meetings_to_database(df: pd.DataFrame, meeting_texts, meeting_dates, b
     """Write meetings to the database"""
 
     # Mesh to the existing date format for meetings (YYYYY-MM-DD) from ISO
-    meeting_dates = [date[0:10] for date in meeting_dates]  
+    meeting_dates = [date[0:10] for date in meeting_dates if date is not None]
 
     for date, text in zip(meeting_dates, meeting_texts):
 
@@ -52,27 +60,32 @@ def write_discussions_to_database(df: pd.DataFrame, existing_meetings, existing_
     """Write discussions to the database"""
 
     parsed_discussions = []
-    for ind, row in df.iterrows():
+    for ind, discussion in df.iterrows():
         matching_issues = []
         matching_meetings = []
         try:
-            matching_issues = [issue for issue in existing_issues if issue['identifier'].upper().strip() == row['name'].upper().strip()]
-            matching_meetings = [meeting for meeting in existing_meetings if meeting['date'] == row['date'][:10]]
+            matching_issues = [issue for issue in existing_issues if issue['identifier'].upper().strip() == discussion['name'].upper().strip()]
+            matching_meetings = [meeting for meeting in existing_meetings if meeting['date'] == discussion['date'][:10]]
+            print(len(matching_issues), len(matching_meetings))
+            if(len(matching_issues) == 0):
+                print("No match", discussion["name"])
+            continue
         except KeyError:  # Indicates missing issue identifier or meeting date
             pass
         if len(matching_issues) != 0 and len(matching_meetings) != 0:
-            issue_id = next((issue['id'] for issue in existing_issues if issue['identifier'] == row['name'].upper()))
-            meeting_id = next(meeting['id'] for meeting in existing_meetings if meeting['date'] == row['date'][:10])
+            issue_id = next((issue['id'] for issue in existing_issues if issue['identifier'] == discussion['name'].upper()))
+            meeting_id = next(meeting['id'] for meeting in existing_meetings if meeting['date'] == discussion['date'][:10])
+            print(discussion["date"], discussion["name"])
         
             parsed_discussion = {
-                'body': row['raw_text'],
+                'body': discussion['raw_text'],
                 'issue_id': issue_id,
                 'meeting_id': meeting_id,
-                'votes': row['voting'],
-                'discussion_type': row['discussion_type'],
-                'dollar_amount': row['dollar_amount'],
-                'type': row['type'],
-                'status': row['status'],
+                'votes': discussion['voting'],
+                'discussion_type': discussion['discussion_type'],
+                'dollar_amount': discussion['dollar_amount'],
+                'type': discussion['type'],
+                'status': discussion['status'],
             }
             if parsed_discussion['body'].strip():
                 try:
@@ -84,8 +97,8 @@ def write_discussions_to_database(df: pd.DataFrame, existing_meetings, existing_
 
 if __name__ == '__main__':
     df, meeting_texts, meeting_dates = compile_master_dataframe(MINUTES_PATH)
-    # existing_issues = write_issues_to_database(df, BASE_URL)
-    # existing_meetings = write_meetings_to_database(df, meeting_texts, meeting_dates, BASE_URL)
+    existing_issues = write_issues_to_database(df, BASE_URL)
     # existing_issues = get_issues(BASE_URL)
+    existing_meetings = write_meetings_to_database(df, meeting_texts, meeting_dates, BASE_URL)
     # existing_meetings = get_meetings(BASE_URL)
-    # write_discussions_to_database(df, existing_meetings, existing_issues, BASE_URL)
+    write_discussions_to_database(df, existing_meetings, existing_issues, BASE_URL)

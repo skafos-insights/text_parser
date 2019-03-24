@@ -106,8 +106,39 @@ def extract_noes(text: str) -> str:
             return split[1]
     return ""
 
+def remove_granicus_links(text):
+    return re.sub(r'http://charlottesville.granicus.com.*\n', '', text, flags=re.MULTILINE)
+
+from date_extractor import extract_dates
+
+
+from date_extractor import extract_dates
+def get_date_expensive(text):
+    candidates = extract_dates(text[:1000], return_precision=True)
+    days = [date for (date, precision) in candidates if precision is "day"]
+    if len(days) < 1:
+        return None
+    return days[0].strftime('%m-%d-%y')
+
+from datetime import datetime
+def find_meeting_date(text):
+    try:
+        match = re.findall(r'ON.*\, AT', replace_newlines(text), re.DOTALL)
+
+        if len(match) > 0:
+            datestring = match[0][3:-4]
+            return datetime.strptime(datestring, '%A, %B %d, %Y').strftime('%m-%d-%y')
+    except:
+        pass
+    return get_date_expensive(text)
 
 # Driver functions
+
+def trim_special(text: str) -> str:
+    pat = re.compile(r'^[\s\.\-\/\:]*([^\s\-\.\:](.*[^\s\-\.\:])?)[\s\.\-\/\:]*$')
+    match = pat.findall(text, re.DOTALL)
+    s = match[0] if match else text
+    return s.split(")", maxsplit=1)[0]
 
 def get_consent_agenda_df(text: str, date: str) -> pd.DataFrame:
     """
@@ -124,18 +155,27 @@ def get_consent_agenda_df(text: str, date: str) -> pd.DataFrame:
         consent_df['dollar_amount'] = consent_df['name'].apply(extract_dollar_amount)
         consent_df.loc[consent_df['dollar_amount'] == '', 'dollar_amount'] = consent_df['raw_text'].apply(
             extract_dollar_amount)
-        consent_df['name'] = consent_df.apply(lambda x: x['name'].replace(x['dollar_amount'], ''), axis=1).str.replace(
-            '-', '')
+        dollar_replaced_names = consent_df.apply(lambda x: x['name'].replace(x['dollar_amount'], ''), axis=1)
+        if isinstance(dollar_replaced_names, pd.DataFrame):
+            return pd.DataFrame([])
+            # dollar_replaced_names = dollar_replaced_names["name"]
+        consent_df['name'] = dollar_replaced_names.str.replace('-', '')
         consent_df['status'] = consent_df['raw_text'].apply(extract_status)
         consent_df['name'] = consent_df.apply(lambda x: x['name'].replace(x['status'], ''), axis=1)
-        consent_df['name'] = consent_df['name'].str.replace('(2nd', '', regex=False).str.replace('(carried)', '',
-                                                                                                 regex=False).str.replace(
-            '(CARRIED)', '', regex=False).str.replace('(Carried)', '', regex=False).str.strip()
+        consent_df['name'] = consent_df['name'].str.replace('(2nd', '', regex=False) \
+            .str.replace('(carried)', '',
+                                                                                                 regex=False) \
+            .str.replace('(CARRIED)', '', regex=False).str.replace('(Carried)', '', regex=False).str.strip()
         consent_df['voting'] = consent_df['raw_text'].apply(extract_voting)
         consent_df['date'] = str(date)
         consent_df['name'] = consent_df['name'].str.split().apply(lambda x: ' '.join(x))
+        consent_df['name'] = consent_df['name'].apply(lambda s: trim_special(s))
+
         consent_df = consent_df[consent_df['name'].str.len() < 200]
-    except (AttributeError, IndexError):
+        consent_df = consent_df[consent_df['status'].str.len() < 200]
+    except (AttributeError, IndexError) as e:
+        import traceback
+        traceback.print_exc()
         return pd.DataFrame([])
     return consent_df
 
@@ -160,6 +200,7 @@ def get_other_items_df(text: str, date: str) -> pd.DataFrame:
     other_items_df['name'] = other_items_df.apply(lambda x: x['name'].replace(x['status'], ''), axis=1)
     other_items_df['name'] = other_items_df['name'].str.replace('OTHER BUSINESS', '').str.strip()
     other_items_df = other_items_df[other_items_df['name'].str.len() > 5]
+    other_items_df['name'] = other_items_df['name'].apply(lambda s: trim_special(s))
     other_items_df['type'] = other_items_df['type'].str.replace('\n', '', regex=False).str.replace('  ', ' ',
                                                                                                    regex=False).str.strip()
     other_items_df['voting'] = other_items_df['raw_text'].apply(extract_voting)
@@ -170,8 +211,9 @@ def get_other_items_df(text: str, date: str) -> pd.DataFrame:
     other_items_df = other_items_df[other_items_df['name'].str.len() < 200]
     return other_items_df
 
-
+investigates = []
 def compile_master_dataframe(minutes_path: str):
+    global investigates
     """
     Get a master DataFrame of all the parsed discussions
     """
@@ -183,20 +225,20 @@ def compile_master_dataframe(minutes_path: str):
     for minutes in minutes_path:
         with open(minutes) as file:
             text = file.read()
-            date = FILE_NAMES_AND_DATES[str(minutes).replace('.txt', '.pdf')]
-            print(str(minutes))
-            minutes_id = str(minutes).split("/")[-1].split(".")[0]
+            text = remove_granicus_links(text)
+            #ate = FILE_NAMES_AND_DATES[str(minutes).replace('.txt', '.pdf')]
+            date = find_meeting_date(text)
+            if date is None:
+                investigates.append(text)
             meeting_texts.append(text)
             meeting_dates.append(date)
 
             try:
-                consent_agenda_df = get_consent_agenda_df(text, date)
-                consent_agenda_df["document_id"] = minutes_id
-                consent_dfs.append(consent_agenda_df)
-                other_items_df = get_other_items_df(text, date)
-                other_items_df["document_id"] = minutes_id
-                other_items_dfs.append(other_items_df)
-            except AttributeError:
+                consent_dfs.append(get_consent_agenda_df(text, date))
+                other_items_dfs.append(get_other_items_df(text, date))
+            except AttributeError as e:
+                import traceback
+                traceback.print_exc()
                 print('BAD PATH: {}'.format(str(minutes)))
 
     consent_combined = pd.concat(consent_dfs)
