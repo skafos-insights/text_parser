@@ -49,6 +49,13 @@ def create_meeting_if_needed(meeting, meetings, base_url):
         return created_meeting
     else:
         return next(m for m in meetings if m["date"] == meeting["date"])
+import json
+def update_meeting(meeting, base_url):
+    r = requests.put(base_url + "/meetings/" + str(meeting['id']), json={"meeting": meeting})
+    if r.status_code != 200:
+        print("Failed to update meeting!" , meeting["date"], json.dumps({"meeting": meeting}))
+    updated_meeting = get_data(r)
+    return updated_meeting
 
 
 def create_discussion(discussion, discussions, base_url):
