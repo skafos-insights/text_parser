@@ -149,7 +149,7 @@ def get_granicus_meetings(base_url):
         server_meetings.at[server_meeting.index[0],'agenda_html_url'] = row['agenda_viewer'] if 'agenda_viewer' in row and isinstance(row.agenda_viewer, str) else None
         server_meetings.at[server_meeting.index[0],'granicus_duration'] = row['duration'] if 'duration' in row else None
         server_meetings.at[server_meeting.index[0],'granicus_mp4'] = row['video'] if 'video' in row else None
-        server_meetings.at[server_meeting.index[0],'video_file'] = row['video_file'] if 'video_file' in row else None
+        server_meetings.at[server_meeting.index[0],'video_file'] = str(row['video_file']) if 'video_file' in row and isinstance(row.agenda_viewer, str) else None
         # print(server_meetings.at[server_meeting.index[0],'granicus_clip_id'])
         # server_meeting['granicus_clip_id'] = row['clip_id']
         # server_meeting['media_player'] = row['media_player']
@@ -206,13 +206,13 @@ def get_granicus_meetings(base_url):
                         "minutes_url": (server_meeting.iloc[0].minutes_url if 'minutes_url' in server_meeting.iloc[0] else None),
                         "score": score
                     }); 
-                    # if score > 50:
-                        # almost_match.append({
-                            # "name": strip_preface,
-                            # "server_name": item_match,
-                            # "meeting_date": row.date.strftime('%m/%d/%Y'),
-                            # "score": score
-                        # }); 
+                    if score > 60:
+                        almost_match.append({
+                            "name": strip_preface,
+                            "server_name": item_match,
+                            "meeting_date": row.date.strftime('%m/%d/%Y'),
+                            "score": score
+                        }); 
                     
                 #print(score)
                 # print(agenda_item.item_name)
@@ -230,14 +230,16 @@ def get_granicus_meetings(base_url):
     # print(server_meetings[server_meetings.granicus_clip_id.notna()].granicus_clip_id.to_json())
     # df = df[df.date == ]
     
-    print("no_match")
-    print(json.dumps(no_match))
-    # print("double_match")
+    print("no_match ",len(no_match))
+    # print(json.dumps(no_match))
+    print("double_match ", len(double_match))
     # print(json.dumps(double_match))
     # print("no_item_match")
     # print(json.dumps(no_item_match))
-    # print("almost_match")
+    print("almost_match ",len(almost_match))
     # print(json.dumps(almost_match))
+    print("no_match")
+    print(json.dumps(no_match))
     
     # for index, row in server_meetings.iterrows():
         # print(server_meetings.columns.values)
@@ -258,7 +260,7 @@ def get_granicus_meetings(base_url):
         # print(json.dumps(row))
         if row["granicus_clip_id"] is not None:
             update_meeting(row, base_url)
-            #print(json.dumps(row))
+            # print(json.dumps(row))
     server_meetings[server_meetings['granicus_clip_id'].notnull()].to_json('test.json',orient='records')
     # print("server_meetings")
     # print(json.dumps(server_meetings.values.tolist()))
